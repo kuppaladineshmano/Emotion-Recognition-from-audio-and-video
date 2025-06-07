@@ -12,6 +12,14 @@ from src.video_emotion import initialize_detector
 st.title("Emotion Recognition from Audio and Video")
 st.write("Upload a WAV file for audio-based emotion prediction or an MP4 file for video-based emotion prediction.")
 
+# Check if PyAudio is available
+PYAUDIO_AVAILABLE = True
+try:
+    import pyaudio
+except ImportError:
+    PYAUDIO_AVAILABLE = False
+    st.warning("⚠️ PyAudio is not available. Audio emotion recognition may not work properly. Video emotion recognition is still available.")
+
 # Download audio model
 AUDIO_MODEL_PATH = 'models/audio_emotion_model.h5'
 # Direct file ID for Google Drive
@@ -98,18 +106,21 @@ def predict_video_emotion(video_path):
 # Streamlit interface
 tab = st.selectbox("Choose Input Type", ["Audio", "Video"])
 if tab == "Audio":
-    uploaded_audio = st.file_uploader("Upload Audio (WAV)", type=["wav"])
-    if uploaded_audio:
-        # Create a temp directory if it doesn't exist
-        os.makedirs("temp", exist_ok=True)
-        temp_path = os.path.join("temp", "temp_audio.wav")
-        with open(temp_path, "wb") as f:
-            f.write(uploaded_audio.getbuffer())
-        try:
-            emotion = predict_audio_emotion(temp_path)
-            st.write(f"✅ Predicted Audio Emotion: {emotion}")
-        except Exception as e:
-            st.error(f"Audio prediction failed: {e}")
+    if not PYAUDIO_AVAILABLE:
+        st.error("❌ Audio emotion recognition requires PyAudio, which is not available in this environment. Please use video emotion recognition instead.")
+    else:
+        uploaded_audio = st.file_uploader("Upload Audio (WAV)", type=["wav"])
+        if uploaded_audio:
+            # Create a temp directory if it doesn't exist
+            os.makedirs("temp", exist_ok=True)
+            temp_path = os.path.join("temp", "temp_audio.wav")
+            with open(temp_path, "wb") as f:
+                f.write(uploaded_audio.getbuffer())
+            try:
+                emotion = predict_audio_emotion(temp_path)
+                st.write(f"✅ Predicted Audio Emotion: {emotion}")
+            except Exception as e:
+                st.error(f"Audio prediction failed: {e}")
 elif tab == "Video":
     uploaded_video = st.file_uploader("Upload Video (MP4)", type=["mp4"])
     if uploaded_video:

@@ -2,6 +2,15 @@ import librosa
 import numpy as np
 from tensorflow.keras.models import load_model
 import os
+import sys
+
+# Check if PyAudio is available
+PYAUDIO_AVAILABLE = True
+try:
+    import pyaudio
+except ImportError:
+    PYAUDIO_AVAILABLE = False
+    print("Warning: PyAudio is not available. Audio emotion recognition may not work properly.")
 
 # Load the pre-trained model
 MODEL_PATH = 'models/audio_emotion_model.h5'
@@ -58,6 +67,9 @@ def predict_emotion_from_audio(audio_path):
     Returns:
         str: The predicted emotion.
     """
+    if not PYAUDIO_AVAILABLE:
+        return "PyAudio is not available. Audio emotion recognition is disabled."
+        
     global model
     if model is None:
         if not load_audio_model():
