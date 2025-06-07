@@ -12,7 +12,7 @@ st.write("Upload a WAV file for audio-based emotion prediction or an MP4 file fo
 
 # Download audio model
 AUDIO_MODEL_PATH = 'models/audio_emotion_model.h5'
-AUDIO_MODEL_URL = 'https://drive.google.com/drive/folders/1ohI2trIkypZP7EPT9qRtWcnvHX05dZet?usp=drive_link'
+AUDIO_MODEL_URL = 'https://drive.google.com/drive/folders/1ohI2trIkypZP7EPT9qRtWcnvHX05dZet?usp=sharing'
 if not os.path.exists(AUDIO_MODEL_PATH):
     os.makedirs('models', exist_ok=True)
     gdown.download(AUDIO_MODEL_URL, AUDIO_MODEL_PATH, quiet=False)
