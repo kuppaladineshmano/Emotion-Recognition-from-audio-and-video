@@ -1,105 +1,81 @@
 import streamlit as st
-import cv2
-import numpy as np
 import os
 import gdown
-from fer import FER
 import librosa
+import numpy as np
 from tensorflow.keras.models import load_model
+from fer import FER
+import cv2
 
-# --- Configuration ---
-AUDIO_MODEL_URL = "https://docs.google.com/uc?export=download&id=1g_y14-C5bYV3-d_a-TO2g_yLg-ZgH-qj"
-AUDIO_MODEL_PATH = "models/audio_emotion_model.h5"
-EMOTIONS = ["angry", "disgust", "fear", "happy", "neutral", "sad", "surprise"]
+st.title("Emotion Recognition from Audio and Video")
+st.write("Upload a WAV file for audio-based emotion prediction or an MP4 file for video-based emotion prediction.")
 
-# --- Model Loading ---
-@st.cache_resource
-def download_model():
-    """Downloads the audio model from Google Drive if it doesn't exist."""
-    if not os.path.exists(AUDIO_MODEL_PATH):
-        st.info("Downloading audio emotion recognition model... This may take a moment.")
-        os.makedirs(os.path.dirname(AUDIO_MODEL_PATH), exist_ok=True)
-        gdown.download(AUDIO_MODEL_URL, AUDIO_MODEL_PATH, quiet=False)
-    return load_model(AUDIO_MODEL_PATH)
+# Download audio model
+AUDIO_MODEL_PATH = 'models/audio_emotion_model.h5'
+AUDIO_MODEL_URL = 'https://drive.google.com/drive/folders/1ohI2trIkypZP7EPT9qRtWcnvHX05dZet?usp=drive_link'
+if not os.path.exists(AUDIO_MODEL_PATH):
+    os.makedirs('models', exist_ok=True)
+    gdown.download(AUDIO_MODEL_URL, AUDIO_MODEL_PATH, quiet=False)
 
-@st.cache_resource
-def get_video_detector():
-    """Initializes the FER video emotion detector."""
-    return FER(mtcnn=True)
+# Load audio model
+try:
+    audio_model = load_model(AUDIO_MODEL_PATH)
+    st.success("Audio model loaded")
+except Exception as e:
+    st.error(f"Audio model loading failed: {e}")
 
-audio_model = download_model()
-video_detector = get_video_detector()
+# Audio emotion prediction
+def extract_audio_features(audio_path):
+    y, sr = librosa.load(audio_path, sr=22050)
+    mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=40)
+    mfccs_scaled = np.mean(mfccs.T, axis=0)
+    return mfccs_scaled
 
-# --- Audio Processing ---
-def predict_audio_emotion(file_path):
-    """Predicts emotion from an audio file."""
-    try:
-        y, sr = librosa.load(file_path, duration=3, offset=0.5)
-        mfcc = np.mean(librosa.feature.mfcc(y=y, sr=sr, n_mfcc=40).T, axis=0)
-        mfcc = np.expand_dims(mfcc, axis=-1)
-        mfcc = np.expand_dims(mfcc, axis=0)
-        prediction = audio_model.predict(mfcc)
-        predicted_emotion = EMOTIONS[np.argmax(prediction)]
-        return predicted_emotion
-    except Exception as e:
-        st.error(f"Error processing audio: {e}")
-        return None
+def predict_audio_emotion(audio_path):
+    features = extract_audio_features(audio_path)
+    features = features.reshape(1, features.size, 1)
+    prediction = audio_model.predict(features)
+    emotions = ['Angry', 'Happy', 'Neutral', 'Sad']
+    return emotions[np.argmax(prediction)]
 
-# --- UI ---
-st.set_page_config(page_title="Emotion Recognition System", layout="wide")
-st.title("Emotion Recognition from Audio & Video")
+# Video emotion prediction
+def predict_video_emotion(video_path):
+    detector = FER(mtcnn=True)
+    cap = cv2.VideoCapture(video_path)
+    emotions = []
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+            break
+        result = detector.detect_emotions(frame)
+        if result:
+            emotions.append(result[0]['emotions'])
+    cap.release()
+    if not emotions:
+        return "No emotions detected"
+    # Aggregate emotions (e.g., most frequent)
+    dominant_emotion = max(set([max(e, key=e.get) for e in emotions]), key=[max(e, key=e.get) for e in emotions].count)
+    return dominant_emotion
 
-st.sidebar.header("Controls")
-app_mode = st.sidebar.selectbox("Choose the mode", ["Video Emotion Recognition", "Audio Emotion Recognition"])
-
-if app_mode == "Video Emotion Recognition":
-    st.header("Video Emotion Recognition")
-    st.info("Position your face in the camera frame to see the detected emotion.")
-    
-    run_video = st.checkbox("Start Camera", value=True)
-    FRAME_WINDOW = st.image([])
-    
-    cap = cv2.VideoCapture(0)
-
-    if run_video:
-        while True:
-            ret, frame = cap.read()
-            if not ret:
-                st.warning("Could not read frame from camera. Please ensure it is not being used by another application.")
-                break
-            
-            # Detect emotions
-            result = video_detector.detect_emotions(frame)
-            
-            # Draw bounding boxes and emotions
-            for face in result:
-                (x, y, w, h) = face["box"]
-                emotions = face["emotions"]
-                dominant_emotion = max(emotions, key=emotions.get)
-                cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
-                cv2.putText(frame, dominant_emotion, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
-
-            FRAME_WINDOW.image(frame, channels="BGR")
-    else:
-        cap.release()
-        st.info("Camera is off.")
-
-elif app_mode == "Audio Emotion Recognition":
-    st.header("Audio Emotion Recognition")
-    st.info("Upload an audio file (.wav, .mp3) to analyze the emotion.")
-    
-    uploaded_file = st.file_uploader("Choose an audio file...", type=["wav", "mp3"])
-
-    if uploaded_file is not None:
-        # Save the uploaded file temporarily
+# Streamlit interface
+tab = st.selectbox("Choose Input Type", ["Audio", "Video"])
+if tab == "Audio":
+    uploaded_audio = st.file_uploader("Upload Audio (WAV)", type=["wav"])
+    if uploaded_audio:
         with open("temp_audio.wav", "wb") as f:
-            f.write(uploaded_file.getbuffer())
-        
-        st.audio(uploaded_file, format='audio/wav')
-        
-        if st.button("Analyze Emotion"):
-            with st.spinner("Analyzing..."):
-                emotion = predict_audio_emotion("temp_audio.wav")
-                if emotion:
-                    st.success(f"Predicted Emotion: **{emotion.capitalize()}**")
-            os.remove("temp_audio.wav")
+            f.write(uploaded_audio.getbuffer())
+        try:
+            emotion = predict_audio_emotion("temp_audio.wav")
+            st.write(f"✅ Predicted Audio Emotion: {emotion}")
+        except Exception as e:
+            st.error(f"Audio prediction failed: {e}")
+elif tab == "Video":
+    uploaded_video = st.file_uploader("Upload Video (MP4)", type=["mp4"])
+    if uploaded_video:
+        with open("temp_video.mp4", "wb") as f:
+            f.write(uploaded_video.getbuffer())
+        try:
+            emotion = predict_video_emotion("temp_video.mp4")
+            st.write(f"✅ Predicted Video Emotion: {emotion}")
+        except Exception as e:
+            st.error(f"Video prediction failed: {e}")
