@@ -1,0 +1,10 @@
+opencv-python
+fer
+librosa
+tensorflow
+streamlit
+numpy
+pandas
+scikit-learn
+matplotlib
+pyaudio
