@@ -5,10 +5,26 @@ import os
 
 # Load the pre-trained model
 MODEL_PATH = 'models/audio_emotion_model.h5'
-if os.path.exists(MODEL_PATH):
-    model = load_model(MODEL_PATH)
-else:
-    model = None
+model = None
+
+def load_audio_model():
+    """
+    Loads the audio emotion recognition model.
+    
+    Returns:
+        bool: True if the model was loaded successfully, False otherwise.
+    """
+    global model
+    try:
+        if os.path.exists(MODEL_PATH):
+            model = load_model(MODEL_PATH)
+            return True
+        else:
+            print(f"Model file not found at {MODEL_PATH}")
+            return False
+    except Exception as e:
+        print(f"Error loading model: {e}")
+        return False
 
 # Define the emotions
 EMOTIONS = ["happy", "sad", "angry", "neutral"]
@@ -23,7 +39,12 @@ def extract_features(audio_path):
     Returns:
         np.array: The extracted features.
     """
-    y, sr = librosa.load(audio_path, sr=None)
+    try:
+        y, sr = librosa.load(audio_path, sr=None)
+    except Exception as e:
+        print(f"Error loading audio file: {e}")
+        # Return a default feature vector of zeros
+        return np.zeros(40)
     mfccs = np.mean(librosa.feature.mfcc(y=y, sr=sr, n_mfcc=40).T, axis=0)
     return mfccs
 
@@ -37,15 +58,21 @@ def predict_emotion_from_audio(audio_path):
     Returns:
         str: The predicted emotion.
     """
+    global model
     if model is None:
-        return "Model not found"
+        if not load_audio_model():
+            return "Model not found or could not be loaded"
         
-    features = extract_features(audio_path)
-    features = np.expand_dims(features, axis=0)
-    features = np.expand_dims(features, axis=2)
-    
-    prediction = model.predict(features)
-    predicted_emotion = EMOTIONS[np.argmax(prediction)]
+    try:
+        features = extract_features(audio_path)
+        features = np.expand_dims(features, axis=0)
+        features = np.expand_dims(features, axis=2)
+        
+        prediction = model.predict(features)
+        predicted_emotion = EMOTIONS[np.argmax(prediction)]
+    except Exception as e:
+        print(f"Error predicting emotion: {e}")
+        return f"Error predicting emotion: {str(e)}"
     
     return predicted_emotion
 
