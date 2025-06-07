@@ -1,86 +1,105 @@
 import streamlit as st
 import cv2
 import numpy as np
-from video_emotion import detect_emotions_in_frame, draw_emotions_on_frame
-from audio_emotion import predict_emotion_from_audio
-import pyaudio
-import wave
 import os
+import gdown
+from fer import FER
+import librosa
+from tensorflow.keras.models import load_model
 
-# Audio recording parameters
-CHUNK = 1024
-FORMAT = pyaudio.paInt16
-CHANNELS = 1
-RATE = 44100
-WAVE_OUTPUT_FILENAME = "temp_audio.wav"
+# --- Configuration ---
+AUDIO_MODEL_URL = "https://docs.google.com/uc?export=download&id=1g_y14-C5bYV3-d_a-TO2g_yLg-ZgH-qj"
+AUDIO_MODEL_PATH = "models/audio_emotion_model.h5"
+EMOTIONS = ["angry", "disgust", "fear", "happy", "neutral", "sad", "surprise"]
 
-def record_audio():
-    """
-    Records audio from the microphone.
-    """
-    p = pyaudio.PyAudio()
+# --- Model Loading ---
+@st.cache_resource
+def download_model():
+    """Downloads the audio model from Google Drive if it doesn't exist."""
+    if not os.path.exists(AUDIO_MODEL_PATH):
+        st.info("Downloading audio emotion recognition model... This may take a moment.")
+        os.makedirs(os.path.dirname(AUDIO_MODEL_PATH), exist_ok=True)
+        gdown.download(AUDIO_MODEL_URL, AUDIO_MODEL_PATH, quiet=False)
+    return load_model(AUDIO_MODEL_PATH)
 
-    stream = p.open(format=FORMAT,
-                    channels=CHANNELS,
-                    rate=RATE,
-                    input=True,
-                    frames_per_buffer=CHUNK)
+@st.cache_resource
+def get_video_detector():
+    """Initializes the FER video emotion detector."""
+    return FER(mtcnn=True)
 
-    st.write("Recording...")
+audio_model = download_model()
+video_detector = get_video_detector()
 
-    frames = []
+# --- Audio Processing ---
+def predict_audio_emotion(file_path):
+    """Predicts emotion from an audio file."""
+    try:
+        y, sr = librosa.load(file_path, duration=3, offset=0.5)
+        mfcc = np.mean(librosa.feature.mfcc(y=y, sr=sr, n_mfcc=40).T, axis=0)
+        mfcc = np.expand_dims(mfcc, axis=-1)
+        mfcc = np.expand_dims(mfcc, axis=0)
+        prediction = audio_model.predict(mfcc)
+        predicted_emotion = EMOTIONS[np.argmax(prediction)]
+        return predicted_emotion
+    except Exception as e:
+        st.error(f"Error processing audio: {e}")
+        return None
 
-    for i in range(0, int(RATE / CHUNK * 5)):  # Record for 5 seconds
-        data = stream.read(CHUNK)
-        frames.append(data)
+# --- UI ---
+st.set_page_config(page_title="Emotion Recognition System", layout="wide")
+st.title("Emotion Recognition from Audio & Video")
 
-    st.write("Finished recording.")
+st.sidebar.header("Controls")
+app_mode = st.sidebar.selectbox("Choose the mode", ["Video Emotion Recognition", "Audio Emotion Recognition"])
 
-    stream.stop_stream()
-    stream.close()
-    p.terminate()
-
-    wf = wave.open(WAVE_OUTPUT_FILENAME, 'wb')
-    wf.setnchannels(CHANNELS)
-    wf.setsampwidth(p.get_sample_size(FORMAT))
-    wf.setframerate(RATE)
-    wf.writeframes(b''.join(frames))
-    wf.close()
-
-def main():
-    st.title("Emotion Recognition System")
-
+if app_mode == "Video Emotion Recognition":
     st.header("Video Emotion Recognition")
-    run_video = st.checkbox("Run Video Emotion Recognition")
-
+    st.info("Position your face in the camera frame to see the detected emotion.")
+    
+    run_video = st.checkbox("Start Camera", value=True)
     FRAME_WINDOW = st.image([])
+    
     cap = cv2.VideoCapture(0)
 
     if run_video:
         while True:
             ret, frame = cap.read()
             if not ret:
-                st.write("Failed to grab frame")
+                st.warning("Could not read frame from camera. Please ensure it is not being used by another application.")
                 break
             
-            emotions = detect_emotions_in_frame(frame)
-            frame_with_emotions = draw_emotions_on_frame(frame, emotions)
-            FRAME_WINDOW.image(frame_with_emotions, channels="BGR")
+            # Detect emotions
+            result = video_detector.detect_emotions(frame)
             
-            if not run_video:
-                break
+            # Draw bounding boxes and emotions
+            for face in result:
+                (x, y, w, h) = face["box"]
+                emotions = face["emotions"]
+                dominant_emotion = max(emotions, key=emotions.get)
+                cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+                cv2.putText(frame, dominant_emotion, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
+
+            FRAME_WINDOW.image(frame, channels="BGR")
     else:
-        st.write("Video emotion recognition is stopped.")
+        cap.release()
+        st.info("Camera is off.")
 
+elif app_mode == "Audio Emotion Recognition":
     st.header("Audio Emotion Recognition")
-    run_audio = st.button("Record and Analyze Audio")
+    st.info("Upload an audio file (.wav, .mp3) to analyze the emotion.")
+    
+    uploaded_file = st.file_uploader("Choose an audio file...", type=["wav", "mp3"])
 
-    if run_audio:
-        record_audio()
-        emotion = predict_emotion_from_audio(WAVE_OUTPUT_FILENAME)
-        st.write(f"Predicted Emotion: {emotion}")
-        if os.path.exists(WAVE_OUTPUT_FILENAME):
-            os.remove(WAVE_OUTPUT_FILENAME)
-
-if __name__ == "__main__":
-    main()
+    if uploaded_file is not None:
+        # Save the uploaded file temporarily
+        with open("temp_audio.wav", "wb") as f:
+            f.write(uploaded_file.getbuffer())
+        
+        st.audio(uploaded_file, format='audio/wav')
+        
+        if st.button("Analyze Emotion"):
+            with st.spinner("Analyzing..."):
+                emotion = predict_audio_emotion("temp_audio.wav")
+                if emotion:
+                    st.success(f"Predicted Emotion: **{emotion.capitalize()}**")
+            os.remove("temp_audio.wav")

@@ -1,0 +1,7 @@
+[global]
+pythonVersion = "3.11"
+
+[server]
+enableCORS = true
+enableXsrfProtection = false
+enableWebsocketCompression = false
