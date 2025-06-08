@@ -1,3 +1,14 @@
+---
+title: Emotion Recognition System
+emoji: 😀
+colorFrom: blue
+colorTo: pink
+sdk: streamlit
+sdk_version: 1.39.0
+app_file: app.py
+pinned: false
+---
+
 # Emotion Recognition System
 
 This project is an Emotion Recognition System that detects emotions from both live video (facial expressions) and audio (speech) inputs. It is designed with a focus on being beginner-friendly and deployable as a Streamlit web app.
