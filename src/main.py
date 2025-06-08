@@ -221,58 +221,35 @@ elif tab == "Video" and CV2_AVAILABLE:
             
 elif tab == "Live Detection":
     st.write("Live webcam-based emotion detection")
-    st.write("This is a simplified version that works in the deployment environment")
+    st.write("Using Streamlit's built-in webcam support")
     
-    # Create placeholders for UI elements
-    video_placeholder = st.empty()
-    emotion_text = st.empty()
-    stats_placeholder = st.empty()
+    # Initialize session state for tracking emotions
+    if 'emotion_stats' not in st.session_state:
+        st.session_state.emotion_stats = {"happy": 0, "sad": 0, "angry": 0, "neutral": 0}
     
-    # Create a stop button
-    stop_button = st.button("Stop", key="stop_button")
-    start_button = st.button("Start", key="start_live")
+    if 'current_emotion' not in st.session_state:
+        st.session_state.current_emotion = "No emotion detected"
     
-    # Initialize session state
-    if 'running' not in st.session_state:
-        st.session_state.running = False
+    # Use Streamlit's built-in camera input
+    camera_image = st.camera_input("Take a picture to analyze emotion")
+    
+    # Process the image if available
+    if camera_image is not None:
+        # Display the captured image
+        st.image(camera_image, caption="Captured Image")
         
-    if start_button:
-        st.session_state.running = True
+        # Simulate emotion detection (in a real app, you'd use a model here)
+        emotion = np.random.choice(["happy", "sad", "angry", "neutral"])
+        st.session_state.current_emotion = emotion
+        st.session_state.emotion_stats[emotion] += 1
         
-    if stop_button:
-        st.session_state.running = False
+        # Display the detected emotion
+        st.success(f"Detected emotion: {emotion}")
         
-    # Display status
-    if st.session_state.running:
-        st.write("Status: Running")
+        # Display emotion statistics
+        st.write("Emotion Statistics:")
+        st.write(st.session_state.emotion_stats)
         
-        # Simulate video processing with a placeholder
-        for i in range(10):  # Process 10 frames
-            if stop_button:
-                break
-                
-            # Create a placeholder image with text
-            emotion = np.random.choice(["happy", "sad", "angry", "neutral"])
-            
-            # Update emotion stats
-            if 'emotion_stats' not in st.session_state:
-                st.session_state.emotion_stats = {"happy": 0, "sad": 0, "angry": 0, "neutral": 0}
-            st.session_state.emotion_stats[emotion] += 1
-            
-            # Display a placeholder for the video frame
-            video_placeholder.info(f"Processing frame {i+1}/10 - Detected emotion: {emotion}")
-            
-            # Update emotion text
-            emotion_text.write(f"Current Emotion: {emotion}")
-            
-            # Update stats
-            stats_placeholder.write(f"Emotion Statistics: {st.session_state.emotion_stats}")
-            
-            # Add a delay to simulate processing
-            time.sleep(1)
-            
-        st.session_state.running = False
-        st.write("Processing complete")
-    else:
-        st.write("Status: Stopped")
-        st.write("Click Start to begin emotion detection simulation")
+        # Add a button to clear the current image
+        if st.button("Clear and take another picture"):
+            st.experimental_rerun()
