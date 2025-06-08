@@ -4,13 +4,8 @@ from tensorflow.keras.models import load_model
 import os
 import sys
 
-# Check if PyAudio is available
-PYAUDIO_AVAILABLE = True
-try:
-    import pyaudio
-except ImportError:
-    PYAUDIO_AVAILABLE = False
-    print("Warning: PyAudio is not available. Audio emotion recognition may not work properly.")
+# Set PyAudio as not available to avoid import attempts
+PYAUDIO_AVAILABLE = False
 
 # Load the pre-trained model
 MODEL_PATH = 'models/audio_emotion_model.h5'
@@ -59,7 +54,7 @@ def extract_features(audio_path):
 
 def predict_emotion_from_audio(audio_path):
     """
-    Predicts the emotion from an audio file.
+    Predicts the emotion from an audio file using rule-based approach.
     
     Args:
         audio_path (str): The path to the audio file.
@@ -67,26 +62,31 @@ def predict_emotion_from_audio(audio_path):
     Returns:
         str: The predicted emotion.
     """
-    if not PYAUDIO_AVAILABLE:
-        return "PyAudio is not available. Audio emotion recognition is disabled."
-        
-    global model
-    if model is None:
-        if not load_audio_model():
-            return "Model not found or could not be loaded"
-        
     try:
-        features = extract_features(audio_path)
-        features = np.expand_dims(features, axis=0)
-        features = np.expand_dims(features, axis=2)
+        # Extract features
+        y, sr = librosa.load(audio_path, sr=None)
         
-        prediction = model.predict(features)
-        predicted_emotion = EMOTIONS[np.argmax(prediction)]
+        # Simple rule-based prediction
+        # Analyze audio features to determine emotion
+        energy = np.sum(y**2) / len(y)
+        zero_crossings = np.sum(librosa.zero_crossings(y)) / len(y)
+        tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
+        
+        # Simple rules for emotion classification
+        if energy > 0.01 and tempo > 120:
+            emotion = "happy"
+        elif zero_crossings > 0.05 and energy < 0.005:
+            emotion = "sad"
+        elif energy > 0.02 and zero_crossings > 0.07:
+            emotion = "angry"
+        else:
+            emotion = "neutral"
+            
+        return emotion
+        
     except Exception as e:
         print(f"Error predicting emotion: {e}")
         return f"Error predicting emotion: {str(e)}"
-    
-    return predicted_emotion
 
 # Placeholder for training the model
 def train_model():

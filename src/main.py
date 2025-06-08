@@ -17,13 +17,9 @@ from src.video_emotion import initialize_detector
 st.title("Emotion Recognition System")
 st.write("Detect emotions from live webcam, uploaded video, or audio files.")
 
-# Check if PyAudio is available
-PYAUDIO_AVAILABLE = True
-try:
-    import pyaudio
-except ImportError:
-    PYAUDIO_AVAILABLE = False
-    st.warning("⚠️ PyAudio is not available. Audio emotion recognition may not work properly. Video emotion recognition is still available.")
+# Set PyAudio as not available to avoid import attempts
+PYAUDIO_AVAILABLE = False
+st.info("Audio emotion recognition will use the built-in model. Video emotion recognition is available.")
 
 # Create a built-in audio emotion model
 from tensorflow.keras.models import Sequential
@@ -279,21 +275,21 @@ def live_video_emotion_detection():
 # Streamlit interface
 tab = st.selectbox("Choose Input Type", ["Live Detection", "Video", "Audio"])
 if tab == "Audio":
-    if not PYAUDIO_AVAILABLE:
-        st.error("❌ Audio emotion recognition requires PyAudio, which is not available in this environment. Please use video emotion recognition instead.")
-    else:
-        uploaded_audio = st.file_uploader("Upload Audio (WAV)", type=["wav"])
-        if uploaded_audio:
-            # Create a temp directory if it doesn't exist
-            os.makedirs("temp", exist_ok=True)
-            temp_path = os.path.join("temp", "temp_audio.wav")
-            with open(temp_path, "wb") as f:
-                f.write(uploaded_audio.getbuffer())
-            try:
-                emotion = predict_audio_emotion(temp_path)
-                st.write(f"✅ Predicted Audio Emotion: {emotion}")
-            except Exception as e:
-                st.error(f"Audio prediction failed: {e}")
+    # Always use the built-in audio model, regardless of PyAudio availability
+    st.info("Using built-in audio emotion recognition model")
+    uploaded_audio = st.file_uploader("Upload Audio (WAV)", type=["wav"])
+    if uploaded_audio:
+        # Create a temp directory if it doesn't exist
+        os.makedirs("temp", exist_ok=True)
+        temp_path = os.path.join("temp", "temp_audio.wav")
+        with open(temp_path, "wb") as f:
+            f.write(uploaded_audio.getbuffer())
+        try:
+            # Always use the built-in model
+            emotion = predict_emotion_from_audio_builtin(temp_path)
+            st.write(f"✅ Predicted Audio Emotion: {emotion}")
+        except Exception as e:
+            st.error(f"Audio prediction failed: {e}")
 elif tab == "Video":
     uploaded_video = st.file_uploader("Upload Video (MP4)", type=["mp4"])
     if uploaded_video:
